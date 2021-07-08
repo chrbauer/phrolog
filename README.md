@@ -1,0 +1,2 @@
+# phrolog
+Prolog in Haskell
