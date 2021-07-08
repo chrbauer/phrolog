@@ -15,7 +15,7 @@ class PrologTypes p where
 
 
 type IndexedVar p = ((VariableType p), Int)
-data Term p = Atom !(AtomType p) | Var !(IndexedVar p) | Compound !(FunctorType p) !Int ![Term p]
+data Term p = Atom !(AtomType p) | Var (IndexedVar p) | Compound !(FunctorType p) !Int ![Term p]
 data Axiom p = Axiom (Term p) [Term p] 
 type Program p = [Axiom p]
 
@@ -119,13 +119,19 @@ maxIndex (Atom a) = 0
 maxIndex (Var (_, i)) = i
 maxIndex (Compound _ _ ts) = maximum $ map maxIndex ts
 
+renameVars freshIndex = aux
+   where aux term@(Atom _) = term
+         aux (Var (key, _)) = Var (key, freshIndex)
+         aux (Compound f n ts) = Compound f n (map aux ts)
+
                 
 solve :: (Eq (AtomType p), Eq (FunctorType p), Ord (VariableType p), Show (Term p)) => Program p -> Term p ->  [Term p] 
 solve program goal = prove goal [goal] program
   where prove goal' [] _ = [goal']
         prove goal' _ [] = []
         prove goal' resolvent@(res:rest) (Axiom head clauses:axioms) =
-          --trace ((show res) ++ " <-> " ++ (show head)) $
+          let freshIndex = maxIndex res + 1
+              head' = renameVars freshIndex head in
             case unify res head of
               Nothing -> prove goal' resolvent axioms
               Just mgu -> let inst = instantiate mgu
