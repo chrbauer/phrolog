@@ -17,8 +17,8 @@ instance PrologTypes Bible where
   data FunctorType Bible = Father | Mother | Male | Female | Parent | Son | Grandparent
     deriving (Eq, Ord, Show)
 
-bible :: Program Bible
-bible = [
+bibleFacts :: Program Bible
+bibleFacts = [
   fact (Father, Terach, Abraham),
 
   fact (Father, Terach, Nachor),
@@ -34,8 +34,13 @@ bible = [
   (Son, X, Y) |-  (Male, X) .& (Parent, Y, X)
   ] ++ [ fact (Male, p) |  p <- [Terach, Abraham, Nachor, Haran, Isaac, Lot] ]
     ++ [ fact (Female, p) | p <- [Sarah, Milcah, Yiscah]]
-    ++ [
+
+familyRules :: Program Bible
+familyRules =     [
                (Parent, X, Y) |- (Father, X, Y),
                (Parent, X, Y) |- (Mother, Sarah, Y)
              ]
 
+main = do
+  putStrLn "Is Abraham the father of Isaac?"
+  putStrLn $ if provable bibleFacts (Father, Abraham, Isaac) then "yes" else "don't know"

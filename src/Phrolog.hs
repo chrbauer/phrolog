@@ -132,10 +132,13 @@ solve program goal = prove goal [goal] program
         prove goal' resolvent@(res:rest) (Axiom head clauses:axioms) =
           let freshIndex = maxIndex res + 1
               head' = renameVars freshIndex head in
-            case unify res head of
+            case unify res head' of
               Nothing -> prove goal' resolvent axioms
               Just mgu -> let inst = instantiate mgu
                               goal'' = inst goal'
                           in
                             prove goal'' (map inst clauses ++ rest) program ++
                             prove goal' resolvent axioms
+
+provable :: (Eq (AtomType p), Eq (FunctorType p), Ord (VariableType p), Show (Term p), ToTerm t p) => Program p -> t ->  Bool
+provable p g  = not . null $ solve p (toTerm g)
