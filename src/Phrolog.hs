@@ -7,6 +7,7 @@ import  Data.Map (Map)
 import Prelude hiding (Functor)
 import Data.List (intercalate)
 import Debug.Trace(trace)
+import Data.List (union)
 
 class PrologTypes p where
   data AtomType p
@@ -69,20 +70,24 @@ infixl 4 .&
 (.&) (Axiom head cls) cl = Axiom  head (cls ++ [toTerm cl])
 
 
-occursIn v (Atom _) = False
-occursIn v (Var w) = v == w 
-occursIn v (Compound f _ ts) = any (occursIn v) ts
+vars :: Eq (VariableType p) => Term p -> [IndexedVar p]
+vars (Atom _) = []
+vars (Var w) = [w]
+vars (Compound _ _ ts) = foldl union [] $ map vars ts
+
+occursIn v term = v `elem` (vars term)
+
 
 instantiate subst orig@(Var v) =
     case M.lookup v subst of
       Just replacement -> replacement
       Nothing -> orig
-instantiate subst orig@(Atom _) = orig
-instantiate subst (Compound f n ts) = Compound f n (map (instantiate subst) ts)
+apply subst orig@(Atom _) = orig
+apply subst (Compound f n ts) = Compound f n (map (apply subst) ts)
 
 
-unify :: (Eq (AtomType p), Eq (FunctorType p), Ord (VariableType p)) => Term p -> Term p -> Maybe (Substitution p)
-unify t1 t2 =  aux M.empty [(t1, t2)]
+mgu :: (Eq (AtomType p), Eq (FunctorType p), Ord (VariableType p)) => Term p -> Term p -> Maybe (Substitution p)
+mgu t1 t2 =  aux M.empty [(t1, t2)]
   where --aux :: (Eq a, Eq f, Ord v) =>  Substitution a v f -> [(Term a v f, Term a v f)] -> Maybe (Substitution a v f)
         aux subst [] = Just subst
         aux subst ((ht1, ht2):ts) =
@@ -109,15 +114,15 @@ unify t1 t2 =  aux M.empty [(t1, t2)]
         --applySubst :: (Eq a, Eq f, Ord v) => v -> Term a v f -> Substitution a v f -> [(Term a v f, Term a v f)] -> Maybe (Substitution a v f)
         applySubst v t subst ts = aux subst' ts'
           where --replaceV :: (Eq a, Eq f, Ord v) => Term a v f -> Term a v f 
-                replaceV = instantiate (M.singleton v t)
+                replaceV = apply (M.singleton v t)
                 subst'   = M.map replaceV $ M.insert v t subst
                 ts'      = map (\ (t1, t2) -> (replaceV t1, replaceV t2)) ts
 
 
+varIdx :: IndexedVar p -> Int
+varIdx = snd
 
-maxIndex (Atom a) = 0
-maxIndex (Var (_, i)) = i
-maxIndex (Compound _ _ ts) = maximum $ map maxIndex ts
+maxIndex term = maximum $ 0:(map varIdx $ vars term)
 
 renameVars freshIndex = aux
    where aux term@(Atom _) = term
@@ -132,13 +137,13 @@ solve program goal = prove goal [goal] program
         prove goal' resolvent@(res:rest) (Axiom head clauses:axioms) =
           let freshIndex = maxIndex res + 1
               head' = renameVars freshIndex head in
-            case unify res head' of
+            case mgu res head' of
               Nothing -> prove goal' resolvent axioms
-              Just mgu -> let inst = instantiate mgu
-                              goal'' = inst goal'
-                          in
-                            prove goal'' (map inst clauses ++ rest) program ++
-                            prove goal' resolvent axioms
+              Just subst -> let inst = apply subst
+                                goal'' = inst goal'
+                            in
+                              prove goal'' (map inst clauses ++ rest) program ++
+                              prove goal' resolvent axioms
 
 provable :: (Eq (AtomType p), Eq (FunctorType p), Ord (VariableType p), Show (Term p), ToTerm t p) => Program p -> t ->  Bool
 provable p g  = not . null $ solve p (toTerm g)
